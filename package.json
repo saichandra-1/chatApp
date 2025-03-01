@@ -7,9 +7,7 @@
     "dev": "node server.js",
     "start": "NODE_ENV=production node server.js",
     "build": "next build",
-    "lint": "next lint",
-    "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma db push && next build"
+    "lint": "next lint"
   },
   "dependencies": {
     "next": "15.1.7",
