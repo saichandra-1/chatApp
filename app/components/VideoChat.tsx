@@ -24,7 +24,7 @@ export function VideoChat() {
   
     function onDisconnect() {
       setIsConnected(false);
-      setTransport("N/A");
+      setTransport("N/A");  
     }
   
     // ✅ Listen for incoming "hello" messages

@@ -1,48 +1,29 @@
 import { createServer } from "node:http";
-import next from "next";
 import { Server } from "socket.io";
 
-const dev = process.env.NODE_ENV !== "production";
-const hostname = "localhost";
-const port = 3000;
+const port = process.env.PORT || 3001;  // Use a dynamic port for deployment
 
-const app = next({ dev, hostname, port });
-const handler = app.getRequestHandler();
+const httpServer = createServer();
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*", // Allow all origins (for testing, secure this later)
+    methods: ["GET", "POST"]
+  }
+});
 
-console.log("Reached the SERVER JS     server.js");
+io.on("connection", (socket) => {
+  console.log("✅ WebSocket connection succeeded");
 
-app.prepare().then(() => {
-  const httpServer = createServer(handler);
-
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*", // Allow all origins (modify for security)
-      methods: ["GET", "POST"]
-    }
+  socket.on("hello", (message) => {
+    console.log("📩 Received from client:", message);
+    socket.emit("world", "Server response: " + message);
   });
 
-  io.on("connection", (socket) => {
-    console.log("✅ WebSocket connection succeeded");
-
-    // ✅ Listen for "hello" from client
-    socket.on("hello", (message) => {
-      console.log("📩 Received from client:", message);
-
-      // ✅ Send a response back to the client
-      socket.emit("world","resending the message from the server to clinet : "+message);
-    });
-
-    socket.on("disconnect", () => {
-      console.log("❌ Client disconnected");
-    });
+  socket.on("disconnect", () => {
+    console.log("❌ Client disconnected");
   });
+});
 
-  httpServer
-    .once("error", (err) => {
-      console.error(err);
-      process.exit(1);
-    })
-    .listen(port, () => {
-      console.log(`> Ready on http://${hostname}:${port}`);
-    });
+httpServer.listen(port, () => {
+  console.log(`WebSocket server running on port ${port}`);
 });
