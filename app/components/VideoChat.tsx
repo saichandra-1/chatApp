@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { socket } from "../lib/socket";
 import { Copy } from "lucide-react"; 
 import { Check } from "lucide-react";
@@ -12,6 +12,10 @@ export function VideoChat() {
   const [userId, setUserId] = useState("");
   const [message, setMessage] = useState("");
   const [copiedStates, setCopiedStates] = useState<boolean[]>([]); // Array to track copied state for each message
+  const [messageTimestamps, setMessageTimestamps] = useState<string[]>([]); // Array to store timestamps
+  
+  // Reference to the messages container for auto-scrolling
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   function generateFunnyName() {
     const firstNames = ['Fluffy', 'Wacky', 'Bouncy', 'Silly', 'Goofy', 'Snazzy', 'Zippy', 'Loopy'];
@@ -23,6 +27,37 @@ export function VideoChat() {
     return `${firstName} ${lastName}`;
   }
   
+  // Function to get current time in Indian Standard Time (IST) with 12-hour format
+  function getCurrentISTTime() {
+    const now = new Date();
+    
+    // Converting to IST (UTC+5:30)
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    
+    // Format in 12-hour clock with AM/PM
+    let hours = istTime.getUTCHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // Convert 0 to 12
+    
+    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+    
+    return `${hours}:${minutes} ${ampm}`;
+  }
+  
+  // Function to scroll the message container to the bottom
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+    }
+  };
+  
+  useEffect(() => {
+    // Scroll to bottom whenever messages change
+    scrollToBottom();
+  }, [receivedMessages]);
+  
   useEffect(() => {
     if (socket.connected) {
       onConnect();
@@ -31,6 +66,7 @@ export function VideoChat() {
     const randomUserId = generateFunnyName();
     setUserId(randomUserId);
     setCopiedStates([]); // Initialize copied states for messages
+    setMessageTimestamps([]); // Initialize timestamps for messages
 
     function onConnect() {
       setIsConnected(true);
@@ -48,8 +84,14 @@ export function VideoChat() {
   
     // Listen for incoming messages
     socket.on("world", (data) => {
-      setReceivedMessages((prevMessages) => [...prevMessages, data]);
+      setReceivedMessages((prevMessages) => {
+        const newMessages = [...prevMessages, data];
+        // We need to scroll after the state is updated and the DOM is re-rendered
+        setTimeout(scrollToBottom, 0);
+        return newMessages;
+      });
       setCopiedStates((prevStates) => [...prevStates, false]); // Add a new "not copied" state for the new message
+      setMessageTimestamps((prevTimestamps) => [...prevTimestamps, getCurrentISTTime()]); // Store the timestamp
     });
     
     socket.on("connect", onConnect);
@@ -66,6 +108,8 @@ export function VideoChat() {
     if (message.trim()) {
       socket.emit("hello", userId + "#1!2@$" + message);
       setMessage("");
+      // Also scroll to bottom after sending a message
+      setTimeout(scrollToBottom, 0);
     }
   }
 
@@ -84,7 +128,7 @@ export function VideoChat() {
         );
         setTimeout(() => {
           setCopiedStates((prevStates) =>
-            prevStates.map((state, i) => (i === index ? false : state)) // Revert only this message after 1s
+            prevStates.map((state, i) => (i === index ? false : state)) // Revert only this message after 3s
           );
         }, 3000);
       })
@@ -124,12 +168,14 @@ export function VideoChat() {
       <div className="flex justify-center items-center h-full bg-gray-100">
         <div className="w-[750px] h-[500px] bg-white shadow-lg rounded-2xl p-4">
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Messages</h2>
-          <div className="h-[420px] overflow-y-auto p-2 border border-gray-300 rounded-lg flex flex-col">
+          <div 
+            ref={messagesContainerRef}
+            className="h-[420px] overflow-y-auto p-2 border border-gray-300 rounded-lg flex flex-col"
+          >
             {receivedMessages.map((messageData, index) => {
               const parts = messageData.split("#1!2@$");
               const username = parts[0];
               const messageContent = parts[1];
-              
               const isCurrentUser = username === userId;
               
               return (
@@ -157,6 +203,7 @@ export function VideoChat() {
                       </button>
                     </div>
                     <div className="whitespace-pre-wrap">{messageContent}</div>
+                      <div className="text-xs text-gray-500 text-right">{messageTimestamps[index] || getCurrentISTTime()}</div> 
                   </div>
                 </div>
               );
