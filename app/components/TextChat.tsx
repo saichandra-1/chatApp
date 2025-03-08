@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { socket } from "../lib/socket";
-import { Copy, Check, Users } from "lucide-react"; 
+import { Copy, Check} from "lucide-react"; 
 
 interface props{
   setusername: (username: string) => void,
