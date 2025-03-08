@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { socket } from "../lib/socket";
-import { Copy } from "lucide-react"; 
-import { Check } from "lucide-react";
+import { Copy, Check, Users } from "lucide-react"; 
 
 export function VideoChat() {
   const [isConnected, setIsConnected] = useState(false);
@@ -13,6 +12,7 @@ export function VideoChat() {
   const [message, setMessage] = useState("");
   const [copiedStates, setCopiedStates] = useState<boolean[]>([]); // Array to track copied state for each message
   const [messageTimestamps, setMessageTimestamps] = useState<string[]>([]); // Array to store timestamps
+  const [numberofusersonline, setNumberofusersonline] = useState(0);
   
   // Reference to the messages container for auto-scrolling
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -59,9 +59,6 @@ export function VideoChat() {
   }, [receivedMessages]);
   
   useEffect(() => {
-    if (socket.connected) {
-      onConnect();
-    }
     // Generate random userId
     const randomUserId = generateFunnyName();
     setUserId(randomUserId);
@@ -75,12 +72,20 @@ export function VideoChat() {
       socket.io.engine.on("upgrade", (transport) => {
         setTransport(transport.name);
       });
+      
+      // Announce this user's presence to the server
+      socket.emit("user_joined", { userId: randomUserId });
     }
   
     function onDisconnect() {
       setIsConnected(false);
       setTransport("N/A");  
     }
+    
+    // Listen for user count updates from the server
+    socket.on("user_count", (count) => {
+      setNumberofusersonline(count);
+    });
   
     // Listen for incoming messages
     socket.on("world", (data) => {
@@ -94,13 +99,19 @@ export function VideoChat() {
       setMessageTimestamps((prevTimestamps) => [...prevTimestamps, getCurrentISTTime()]); // Store the timestamp
     });
     
+    // Check if already connected
+    if (socket.connected) {
+      onConnect();
+    }
+    
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
       
     return () => {
+      // Notify server that user is leaving
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
-      socket.off("world");  // Clean up listener
+      socket.off("world");
     };
   }, []);
 
@@ -139,6 +150,12 @@ export function VideoChat() {
 
   return (
     <div className="flex flex-col items-center">
+      {/* Users Online Count with Icon at the top */}
+      <div className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg mb-4 mt-4">
+        <Users size={20} className="mr-2" />
+        <span className="font-medium">{numberofusersonline} Users Online</span>
+      </div>
+
       <div>
         <p>Status: {isConnected ? "connected" : "disconnected"}</p>
         <p>Transport: {transport}</p>
@@ -168,7 +185,7 @@ export function VideoChat() {
       <div className="flex justify-center items-center h-full bg-gray-100">
         <div className="w-[750px] h-[500px] bg-white shadow-lg rounded-2xl p-4">
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Messages</h2>
-          <div 
+          <div onContextMenu={(e) => e.preventDefault()}
             ref={messagesContainerRef}
             className="h-[420px] overflow-y-auto p-2 border border-gray-300 rounded-lg flex flex-col"
           >

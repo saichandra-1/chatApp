@@ -7,6 +7,7 @@ const hostname = "localhost";
 const port = 3000;
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
+const connectedUsers = new Map();
 
 app.prepare().then(() => {
   const httpServer = createServer(handler);
@@ -16,6 +17,14 @@ app.prepare().then(() => {
 
   io.on("connection", (socket) => {
     console.log("WebSocket connection succeeded");
+
+    socket.on("user_joined", (data) => {
+      const { userId } = data;
+      connectedUsers.set(socket.id, userId);
+
+      io.emit("user_count", connectedUsers.size);
+    });
+
     
     // Listen for "hello" messages from clients
     socket.on("hello", (message) => {
@@ -30,6 +39,8 @@ app.prepare().then(() => {
     });
 
     socket.on("disconnect", () => {
+      connectedUsers.delete(socket.id);
+      io.emit("user_count", connectedUsers.size);
       console.log("User disconnected");
     });
   });
