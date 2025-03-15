@@ -73,28 +73,31 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
       setIsConnectedTop(true);
       socket.emit("user_joined", { userId: userId });
     }
-
+  
     function onDisconnect() {
       setIsConnectedTop(false);
-      socket.emit("disconnect");
+      socket.disconnect(); // Disconnect using socket.disconnect() instead of emitting "disconnect"
     }
-
+  
     socket.on("user_count", setNumberofusersonline);
-
+  
     socket.on("world", (data) => {
       setReceivedMessages((prevMessages) => [...prevMessages, data]);
       setCopiedStates((prevStates) => [...prevStates, false]);
       setMessageTimestamps((prevTimestamps) => [...prevTimestamps, getCurrentISTTime()]);
       setTimeout(scrollToBottom, 0);
     });
-
+  
+    // Handle initial connection
     if (socket.connected) {
       onConnect();
     }
-
+  
+    // Event listeners for connection and disconnection
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-
+  
+    // Cleanup event listeners when component unmounts
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
@@ -102,6 +105,7 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
       socket.off("user_count");
     };
   }, [setIsConnectedTop, setNumberofusersonline, userId]); // Added missing dependencies
+  
 
   useEffect(() => {
     scrollToBottom();
