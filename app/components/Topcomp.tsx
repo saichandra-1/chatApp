@@ -2,11 +2,19 @@
 import {  useState } from "react";
 import { TextChat } from "./TextChat";
 import { Circle, Users } from 'lucide-react';
+import { Suspense } from 'react';
+
 
 export function Topcomp() {
     const [username, setusername] = useState("");
     const [isConnected, setIsConnected] = useState(false);
     const [numberofusersonline, setNumberofusersonline] = useState(0);
+
+    //handle page reload
+    const pagereload = () => {
+        // window.location.href = window.location.href;
+        history.go(0);
+    }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -14,7 +22,7 @@ export function Topcomp() {
       <header className="bg-white shadow-sm p-4">
         <div className="w-full px-2 mx-auto flex justify-between items-center">
           <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-gray-800 mr-4">Chat App</h1>
+            <h1 className="text-2xl font-bold text-gray-800 mr-4 hover:cursor-pointer" onClick={pagereload}>Chat App</h1>
           </div>
           
           {/* Username with online indicator */}
@@ -61,13 +69,16 @@ export function Topcomp() {
           <p className="text-gray-600 text-xl">Connect with people around the world</p>
         </div>
         
+        
+        <Suspense fallback={<div>Loading...</div>} >
         <div className="w-full">
-          <TextChat 
+        <TextChat 
             setusername={setusername} 
             setIsConnectedTop={setIsConnected} 
             setNumberofusersonline={setNumberofusersonline} 
-          />
-        </div>
+            />
+            </div>
+    </Suspense>
       </main>
     </div>
   );

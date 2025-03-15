@@ -1,6 +1,8 @@
+
 import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
+import { IdCard } from "lucide-react";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -9,69 +11,76 @@ const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
 
 // Track unique users by userId -> Set of socket IDs
-const userSocketMap = new Map();
-// Track socket ID -> userId for quick lookups during disconnect
-const socketUserMap = new Map();
+const socketUserMap = new Map(); // socketId -> userId
+const roomUsers = new Map(); // roomId -> Set of userIds
 
 app.prepare().then(() => {
   const httpServer = createServer(handler);
   const io = new Server(httpServer, {
-    cors: { origin: "*" }, // Allow all origins (for testing)
+    cors: { origin: "*" },
   });
 
   io.on("connection", (socket) => {
-    console.log("WebSocket connection succeeded");
+    let currentRoom = "";
+    // Handle joining a room
+    socket.on("joinRoom", ({ userId, roomId }) => {
 
-    socket.on("user_joined", (data) => {  
-      const { userId } = data;
-      
-      // Track this socket for this user
-      if (!userSocketMap.has(userId)) {
-        userSocketMap.set(userId, new Set());
-      }
-      userSocketMap.get(userId).add(socket.id);
-      
-      // Also save reverse mapping for quick lookup on disconnect
+      if (!userId || !roomId) return;
+
       socketUserMap.set(socket.id, userId);
+      // Leave previous room if exists
+      if (currentRoom) {
+        socket.leave(currentRoom);
+        if (roomUsers.has(currentRoom)) {
+          roomUsers.get(currentRoom).delete(userId);
+          io.to(currentRoom).emit("user_count", roomUsers.get(currentRoom).size);
+        }
+      }
 
-      // Emit the count of unique users (not socket connections)
-      io.emit("user_count", userSocketMap.size);
+      // Join the new room
+      currentRoom = roomId;
+      socket.join(roomId);
+
+      if (!roomUsers.has(roomId)) {
+        roomUsers.set(roomId, new Set());
+      }
+      roomUsers.get(roomId).add(userId);
+
+      io.to(roomId).emit("user_count", roomUsers.get(roomId).size);
+      console.log(`User ${userId} joined room: ${roomId}`);
+
+      io.to(roomId).emit("message", {
+        roomId,
+        username: "Server",
+        message: `User ${userId} joined room ${roomId}`,
+      });
     });
-    
-    // Listen for "hello" messages from clients
+
+
     socket.on("hello", (message) => {
       const useridandmessage = message.split("#1!2@$");
       const userid = useridandmessage[0];
-      if(useridandmessage.length > 1){
+
+      if (useridandmessage.length > 1) {
         const remainingmessage = useridandmessage[1];
-        if(remainingmessage){
-          io.emit("world", `${userid}#1!2@$${remainingmessage}`); 
+        if (remainingmessage && currentRoom) {
+          io.to(currentRoom).emit("world", `${userid}#1!2@$${remainingmessage}`);
         }
       }
     });
 
+    // Handle user disconnect
     socket.on("disconnect", () => {
-      // Get the userId for this socket
+      console.log(socketUserMap)
       const userId = socketUserMap.get(socket.id);
-      
-      if (userId) {
-        // Remove this socket from the user's set of sockets
-        const userSockets = userSocketMap.get(userId);
-        userSockets.delete(socket.id);
-        
-        // If the user has no more connected sockets, remove the user entirely
-        if (userSockets.size === 0) {
-          userSocketMap.delete(userId);
+
+      if (currentRoom && userId) {
+        if (roomUsers.has(currentRoom)) {
+          roomUsers.get(currentRoom).delete(userId);
+          io.to(currentRoom).emit("user_count", roomUsers.get(currentRoom).size);
         }
-        
-        // Clean up the reverse mapping
-        socketUserMap.delete(socket.id);
-        
-        // Update the user count
-        io.emit("user_count", userSocketMap.size);
       }
-      
-      console.log("User disconnected");
+      console.log(`User ${userId} disconnected`);
     });
   });
 
