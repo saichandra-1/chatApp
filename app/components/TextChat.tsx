@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { socket } from "../lib/socket";
 import { Copy, Check } from "lucide-react";
@@ -9,29 +9,53 @@ interface Props {
   setusername: (username: string) => void;
   setIsConnectedTop: (isConnected: boolean) => void;
   setNumberofusersonline: (numberofusersonline: number) => void;
+  setListOfUsers: (listOfUsers: string[]) => void;
 }
 
-export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonline }: Props) {
+export function TextChat({
+  setusername,
+  setIsConnectedTop,
+  setNumberofusersonline,
+  setListOfUsers,
+}: Props) {
   const [receivedMessages, setReceivedMessages] = useState<string[]>([]);
   const [userId, setUserId] = useState("");
   const [message, setMessage] = useState("");
   const [copiedStates, setCopiedStates] = useState<boolean[]>([]);
   const [messageTimestamps, setMessageTimestamps] = useState<string[]>([]);
+  
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
-
   const [roomId, setRoomId] = useState("");
 
   function generateFunnyName() {
-    const firstNames = ['Fluffy', 'Wacky', 'Bouncy', 'Silly', 'Goofy', 'Snazzy', 'Zippy', 'Loopy'];
-    const lastNames = ['McGiggles', 'Banana', 'Wobble', 'Snorkel', 'Doodle', 'Sprinkle', 'Bumble'];
-
-    return `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+    const firstNames = [
+      "Fluffy",
+      "Wacky",
+      "Bouncy",
+      "Silly",
+      "Goofy",
+      "Snazzy",
+      "Zippy",
+      "Loopy",
+    ];
+    const lastNames = [
+      "McGiggles",
+      "Banana",
+      "Wobble",
+      "Snorkel",
+      "Doodle",
+      "Sprinkle",
+      "Bumble",
+    ];
+    return `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${
+      lastNames[Math.floor(Math.random() * lastNames.length)]
+    }`;
   }
 
   useEffect(() => {
-    const roomid = searchParams.get('roomid');
+    const roomid = searchParams.get("roomid");
     if (!roomid) {
       const newRoomId = Math.floor(Math.random() * 100000).toString();
       window.location.href = `${window.location.pathname}?roomid=${newRoomId}`;
@@ -39,8 +63,8 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
     } else {
       setRoomId(String(roomid));
     }
-    let storedUserId = localStorage.getItem("userId");
 
+    let storedUserId = localStorage.getItem("userId");
     if (!storedUserId) {
       storedUserId = generateFunnyName();
       localStorage.setItem("userId", storedUserId);
@@ -48,64 +72,75 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
 
     setUserId(storedUserId);
     setusername(storedUserId);
-  }, [searchParams, setusername]); // Added missing dependencies
+  }, [searchParams, setusername]);
 
   useEffect(() => {
     if (roomId && userId) {
       socket.emit("joinRoom", { roomId, userId });
     }
-  }, [roomId, userId]); // This effect runs when roomId or userId changes
+  }, [roomId, userId]);
 
   function getCurrentISTTime() {
     const now = new Date();
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-
+    const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
     let hours = istTime.getUTCHours();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const ampm = hours >= 12 ? "PM" : "AM";
     hours = hours % 12 || 12;
-
-    const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+    const minutes = istTime.getUTCMinutes().toString().padStart(2, "0");
     return `${hours}:${minutes} ${ampm}`;
   }
 
   useEffect(() => {
     function onConnect() {
       setIsConnectedTop(true);
-      socket.emit("user_joined", { userId: userId });
+      if (roomId && userId) {
+        socket.emit("joinRoom", { roomId, userId }); // Re-emit joinRoom on reconnect
+      }
     }
-  
+
     function onDisconnect() {
       setIsConnectedTop(false);
-      socket.disconnect(); // Disconnect using socket.disconnect() instead of emitting "disconnect"
+      socket.disconnect();
     }
-  
-    socket.on("user_count", setNumberofusersonline);
-  
+
+    // Update user count
+    socket.on("user_count", (count) => {
+      setNumberofusersonline(count);
+    });
+
+    // Update list of users when received from server
+    socket.on("listofusers", (data: string[]) => {
+      setListOfUsers(data || []);
+    });
+
+    // Handle incoming messages
     socket.on("world", (data) => {
       setReceivedMessages((prevMessages) => [...prevMessages, data]);
       setCopiedStates((prevStates) => [...prevStates, false]);
-      setMessageTimestamps((prevTimestamps) => [...prevTimestamps, getCurrentISTTime()]);
+      setMessageTimestamps((prevTimestamps) => [
+        ...prevTimestamps,
+        getCurrentISTTime(),
+      ]);
       setTimeout(scrollToBottom, 0);
     });
-  
+
     // Handle initial connection
     if (socket.connected) {
       onConnect();
     }
-  
-    // Event listeners for connection and disconnection
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-  
-    // Cleanup event listeners when component unmounts
+
+    // Cleanup on unmount
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("world");
       socket.off("user_count");
+      socket.off("listofusers");
     };
-  }, [setIsConnectedTop, setNumberofusersonline, userId]); // Added missing dependencies
-  
+  }, [setIsConnectedTop, setNumberofusersonline, userId, roomId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -113,7 +148,8 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
 
   function scrollToBottom() {
     if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
     }
   }
 
@@ -126,7 +162,7 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       sendMessageToServer();
     }
@@ -134,8 +170,16 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
 
   const copyMessageToClipboard = (text: string, index: number) => {
     navigator.clipboard.writeText(text).then(() => {
-      setCopiedStates((prev) => prev.map((state, i) => (i === index ? true : state)));
-      setTimeout(() => setCopiedStates((prev) => prev.map((state, i) => (i === index ? false : state))), 3000);
+      setCopiedStates((prev) =>
+        prev.map((state, i) => (i === index ? true : state))
+      );
+      setTimeout(
+        () =>
+          setCopiedStates((prev) =>
+            prev.map((state, i) => (i === index ? false : state))
+          ),
+        3000
+      );
     });
   };
 
@@ -153,20 +197,49 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
               const isCurrentUser = username === userId;
 
               return (
-                <div key={index} className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} w-full`}>
-                  <div className={`max-w-xl p-3 rounded-xl break-words shadow-sm ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'}`}>
+                <div
+                  key={index}
+                  className={`flex ${
+                    isCurrentUser ? "justify-end" : "justify-start"
+                  } w-full`}
+                >
+                  <div
+                    className={`max-w-xl p-3 rounded-xl break-words shadow-sm ${
+                      isCurrentUser
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-200 text-gray-900"
+                    }`}
+                  >
                     <div className="text-xs flex justify-between items-center mb-1">
-                      <span className={isCurrentUser ? 'text-blue-100' : 'text-gray-500'}>{username}</span>
+                      <span
+                        className={
+                          isCurrentUser ? "text-blue-100" : "text-gray-500"
+                        }
+                      >
+                        {username}
+                      </span>
                       <button
                         onClick={() => copyMessageToClipboard(messageContent, index)}
-                        className={`hover:opacity-80 ${isCurrentUser ? 'text-blue-100' : 'text-gray-600'}`}
+                        className={`hover:opacity-80 ${
+                          isCurrentUser ? "text-blue-100" : "text-gray-600"
+                        }`}
                         title="Copy message"
                       >
-                        {copiedStates[index] ? <Check size={14} /> : <Copy size={12} />}
+                        {copiedStates[index] ? (
+                          <Check size={14} />
+                        ) : (
+                          <Copy size={12} />
+                        )}
                       </button>
                     </div>
-                    <div className="whitespace-pre-wrap text-sm">{messageContent}</div>
-                    <div className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'} text-right mt-1`}>
+                    <div className="whitespace-pre-wrap text-sm">
+                      {messageContent}
+                    </div>
+                    <div
+                      className={`text-xs ${
+                        isCurrentUser ? "text-blue-100" : "text-gray-500"
+                      } text-right mt-1`}
+                    >
                       {messageTimestamps[index] || getCurrentISTTime()}
                     </div>
                   </div>
@@ -186,7 +259,10 @@ export function TextChat({ setusername, setIsConnectedTop, setNumberofusersonlin
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type your message here..."
           />
-          <button onClick={sendMessageToServer} className="bg-blue-500 text-white py-2 px-6 rounded-lg hover:bg-blue-600 transition-colors duration-200 shadow-sm">
+          <button
+            onClick={sendMessageToServer}
+            className="bg-blue-500 text-white py-2 px-6 rounded-lg hover:bg-blue-600 transition-colors duration-200 shadow-sm"
+          >
             Send
           </button>
         </div>
